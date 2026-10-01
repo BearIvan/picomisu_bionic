@@ -84,6 +84,14 @@ enum {
   //   arg_size = sizeof(android_mallopt_leak_info_t)
   M_FREE_MALLOC_LEAK_INFO = 7,
 #define M_FREE_MALLOC_LEAK_INFO M_FREE_MALLOC_LEAK_INFO
+  // Opcodes 8 and 9 are not handled here; 10 keeps the Android 11 number.
+  //
+  // Initialize GWP-ASan for this process if the GWP-ASan options
+  // (libc.debug.gwp_asan.*, GWP_ASAN_*) enable it.
+  //   arg = bool*: true skips the random process sampling
+  //   arg_size = sizeof(bool)
+  M_INITIALIZE_GWP_ASAN = 10,
+#define M_INITIALIZE_GWP_ASAN M_INITIALIZE_GWP_ASAN
 };
 
 // Manipulates bionic-specific handling of memory allocation APIs such as

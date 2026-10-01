@@ -64,6 +64,7 @@
 
 #include <sys/system_properties.h>
 
+#include "gwp_asan_wrappers.h"
 #include "malloc_common.h"
 #include "malloc_common_dynamic.h"
 #include "malloc_heapprofd.h"
@@ -103,6 +104,10 @@ static constexpr MallocDispatch __libc_malloc_default_dispatch
     Malloc(malloc_info),
   };
 
+const MallocDispatch* NativeAllocatorDispatch() {
+  return &__libc_malloc_default_dispatch;
+}
+
 static constexpr char kHooksSharedLib[] = "libc_malloc_hooks.so";
 static constexpr char kHooksPrefix[] = "hooks";
 static constexpr char kHooksPropertyEnable[] = "libc.debug.hooks.enable";
@@ -131,6 +136,12 @@ enum FunctionEnum : uint8_t {
   FUNC_LAST,
 };
 static void* gFunctions[FUNC_LAST];
+
+void SetGlobalFunctions(void* functions[]) {
+  for (size_t i = 0; i < FUNC_LAST; i++) {
+    gFunctions[i] = functions[i];
+  }
+}
 
 extern "C" int __cxa_atexit(void (*func)(void *), void *arg, void *dso);
 
@@ -376,6 +387,10 @@ static void MallocInitImpl(libc_globals* globals) {
   char prop[PROP_VALUE_MAX];
   char* options = prop;
 
+#if !defined(USE_SCUDO)
+  MaybeInitGwpAsanFromLibc(globals);
+#endif
+
   // Prefer malloc debug since it existed first and is a more complete
   // malloc interceptor than the hooks.
   bool hook_installed = false;
@@ -497,6 +512,19 @@ extern "C" bool android_mallopt(int opcode, void* arg, size_t arg_size) {
     }
     return FreeMallocLeakInfo(reinterpret_cast<android_mallopt_leak_info_t*>(arg));
   }
+#if !defined(USE_SCUDO)
+  if (opcode == M_INITIALIZE_GWP_ASAN) {
+    if (arg == nullptr || arg_size != sizeof(bool)) {
+      errno = EINVAL;
+      return false;
+    }
+    // As on the factory libc (and Android 11): the result is not returned; the
+    // call goes on to HeapprofdMallopt like any other opcode.
+    __libc_globals.mutate([&](libc_globals* globals) {
+      return MaybeInitGwpAsan(globals, *reinterpret_cast<bool*>(arg));
+    });
+  }
+#endif
   return HeapprofdMallopt(opcode, arg, arg_size);
 }
 // =============================================================================

@@ -1511,6 +1511,8 @@ filegroup {
     srcs: [
         "arch-common/bionic/crtbegin_so.c",
         "arch-common/bionic/crtbrand.S",
+        "bionic/gwp_asan_wrappers.cpp",
+        "bionic/android_unsafe_frame_pointer_chase.cpp",
         "bionic/icu.cpp",
         "bionic/malloc_common.cpp",
         "bionic/malloc_common_dynamic.cpp",
@@ -1567,10 +1569,14 @@ cc_library {
     shared: {
         srcs: [ ":libc_sources_shared" ],
         whole_static_libs: [
+            "gwp_asan",
             "libc_init_dynamic",
             "libc_common_shared",
         ],
     },
+    // GWP-ASan (libc.so only, as on the factory PICO OS 5.13.7 image, whose
+    // static libc carries none of it).
+    header_libs: ["gwp_asan_headers"],
 
     required: ["tzdata"],
 

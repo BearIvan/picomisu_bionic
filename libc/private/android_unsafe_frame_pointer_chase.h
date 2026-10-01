@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,28 +28,24 @@
 
 #pragma once
 
-#include <pthread.h>
-#include <stdatomic.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <sys/cdefs.h>
 
-#include <private/bionic_globals.h>
-#include <private/bionic_malloc_dispatch.h>
-
-// Function prototypes.
-bool InitSharedLibrary(void* impl_handle, const char* shared_lib, const char* prefix,
-                       MallocDispatch* dispatch_table);
-
-void* LoadSharedLibrary(const char* shared_lib, const char* prefix, MallocDispatch* dispatch_table);
-
-bool FinishInstallHooks(libc_globals* globals, const char* options, const char* prefix);
-
-// The native allocator's dispatch table (the table behind GWP-ASan).
-const MallocDispatch* NativeAllocatorDispatch();
-
-// Replaces the malloc debug style entry points (initialize, finalize,
-// get_malloc_leak_info, free_malloc_leak_info, malloc_backtrace,
-// write_malloc_leak_info) used by android_mallopt() and malloc_backtrace().
-void SetGlobalFunctions(void* functions[]);
-
-// Lock for globals, to guarantee that only one thread is doing a mutate.
-extern pthread_mutex_t gGlobalsMutateLock;
-extern _Atomic bool gGlobalsMutating;
+/*
+ * Implement fast stack unwinding for stack frames with frame pointers. Stores at most num_entries
+ * return addresses to buffer buf. Returns the number of available return addresses, which may be
+ * greater than num_entries.
+ *
+ * This function makes no guarantees about its behavior on encountering a frame built without frame
+ * pointers, except that it should not crash or enter an infinite loop, and that any frames prior to
+ * the frame built without frame pointers should be correct.
+ *
+ * This function is only meant to be used with memory safety tools such as sanitizers which need to
+ * take stack traces efficiently. Normal applications should use APIs such as libunwindstack or
+ * _Unwind_Backtrace.
+ *
+ * Not in libc.map.txt, so not exported from libc.so (as on the factory PICO OS 5.13.7 libc);
+ * used by GWP-ASan.
+ */
+extern "C" size_t android_unsafe_frame_pointer_chase(uintptr_t* buf, size_t num_entries);

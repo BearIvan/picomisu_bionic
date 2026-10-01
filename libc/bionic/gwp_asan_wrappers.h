@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,28 +28,12 @@
 
 #pragma once
 
-#include <pthread.h>
-#include <stdatomic.h>
-
 #include <private/bionic_globals.h>
-#include <private/bionic_malloc_dispatch.h>
 
-// Function prototypes.
-bool InitSharedLibrary(void* impl_handle, const char* shared_lib, const char* prefix,
-                       MallocDispatch* dispatch_table);
+// Hooks for libc to possibly install GWP-ASan. Never initializes GWP-ASan in
+// the zygote (app_process*); zygote children ask for it through
+// android_mallopt(M_INITIALIZE_GWP_ASAN).
+bool MaybeInitGwpAsanFromLibc(libc_globals* globals);
 
-void* LoadSharedLibrary(const char* shared_lib, const char* prefix, MallocDispatch* dispatch_table);
-
-bool FinishInstallHooks(libc_globals* globals, const char* options, const char* prefix);
-
-// The native allocator's dispatch table (the table behind GWP-ASan).
-const MallocDispatch* NativeAllocatorDispatch();
-
-// Replaces the malloc debug style entry points (initialize, finalize,
-// get_malloc_leak_info, free_malloc_leak_info, malloc_backtrace,
-// write_malloc_leak_info) used by android_mallopt() and malloc_backtrace().
-void SetGlobalFunctions(void* functions[]);
-
-// Lock for globals, to guarantee that only one thread is doing a mutate.
-extern pthread_mutex_t gGlobalsMutateLock;
-extern _Atomic bool gGlobalsMutating;
+// Maybe initialize GWP-ASan. Set force_init to true to bypass process sampling.
+bool MaybeInitGwpAsan(libc_globals* globals, bool force_init = false);

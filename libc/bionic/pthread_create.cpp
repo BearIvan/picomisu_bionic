@@ -315,6 +315,7 @@ static int __allocate_thread(pthread_attr_t* attr, bionic_tcb** tcbp, void** chi
   thread->attr = *attr;
   thread->mmap_base = mapping.mmap_base;
   thread->mmap_size = mapping.mmap_size;
+  thread->stack_top = reinterpret_cast<uintptr_t>(stack_top);
 
   *tcbp = tcb;
   *child_stack = stack_top;

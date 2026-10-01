@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,30 +26,42 @@
  * SUCH DAMAGE.
  */
 
-#pragma once
+#include "private/android_unsafe_frame_pointer_chase.h"
 
-#include <pthread.h>
-#include <stdatomic.h>
+#include <signal.h>
 
-#include <private/bionic_globals.h>
-#include <private/bionic_malloc_dispatch.h>
+#include "pthread_internal.h"
 
-// Function prototypes.
-bool InitSharedLibrary(void* impl_handle, const char* shared_lib, const char* prefix,
-                       MallocDispatch* dispatch_table);
+// As on the factory PICO OS 5.13.7 libc: the end of the walk is the calling thread's
+// pthread_internal_t::stack_top (set by pthread_create; 0 on the main thread, which then stops
+// after the first frame) or the top of the alternate signal stack when running on it.
+__attribute__((no_sanitize("address", "hwaddress"))) size_t android_unsafe_frame_pointer_chase(
+    uintptr_t* buf, size_t num_entries) {
+  struct frame_record {
+    uintptr_t next_frame, return_addr;
+  };
 
-void* LoadSharedLibrary(const char* shared_lib, const char* prefix, MallocDispatch* dispatch_table);
+  auto begin = reinterpret_cast<uintptr_t>(__builtin_frame_address(0));
+  uintptr_t end = __get_thread()->stack_top;
 
-bool FinishInstallHooks(libc_globals* globals, const char* options, const char* prefix);
+  stack_t ss;
+  if (sigaltstack(nullptr, &ss) == 0 && (ss.ss_flags & SS_ONSTACK)) {
+    end = reinterpret_cast<uintptr_t>(ss.ss_sp) + ss.ss_size;
+  }
 
-// The native allocator's dispatch table (the table behind GWP-ASan).
-const MallocDispatch* NativeAllocatorDispatch();
+  size_t num_frames = 0;
+  while (1) {
+    auto* frame = reinterpret_cast<frame_record*>(begin);
+    if (num_frames < num_entries) {
+      buf[num_frames] = frame->return_addr;
+    }
+    ++num_frames;
+    if (frame->next_frame < begin + sizeof(frame_record) || frame->next_frame >= end ||
+        frame->next_frame % sizeof(void*) != 0) {
+      break;
+    }
+    begin = frame->next_frame;
+  }
 
-// Replaces the malloc debug style entry points (initialize, finalize,
-// get_malloc_leak_info, free_malloc_leak_info, malloc_backtrace,
-// write_malloc_leak_info) used by android_mallopt() and malloc_backtrace().
-void SetGlobalFunctions(void* functions[]);
-
-// Lock for globals, to guarantee that only one thread is doing a mutate.
-extern pthread_mutex_t gGlobalsMutateLock;
-extern _Atomic bool gGlobalsMutating;
+  return num_frames;
+}
